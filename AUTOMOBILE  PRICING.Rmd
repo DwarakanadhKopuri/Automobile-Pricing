@@ -1,0 +1,173 @@
+---
+title: "AUTOMOBILE"
+output: html_document
+---
+#clearing environment
+
+```{r}
+rm(list = ls(all=TRUE))
+```
+# Setting Working Directory
+```{r}
+setwd("F:\\FD\\INSOFE class Data\\Labs\\cute\\20170722_Batch 29_CSE 7302_LinReg_LogReg_CUTe")
+```
+# Reading Data
+```{r}
+auto <- read.csv("Automobile.csv",header = TRUE,sep = ",")
+```
+#Using the str() function to get a feel for the dataset. This function allows you to get the dimensions of the dataset and also helps you glance through the names, types and a few observations of variables from the dataset
+```{r}
+str(auto)
+```
+##Take a look at the data using the "head()" and "tail()" functions
+```{r}
+head(auto)
+tail(auto)
+```
+#using the summary() function to get descriptive statistics of all the numerical variables in the dataset, for categorical variables it gives the frequencies of the different levels
+```{r}
+summary(auto)
+```
+# Identifying and Imputing the missing values using the "Knn Imputation()" function from the DMwR package
+```{r}
+library(DMwR)
+sum(is.na(auto))
+auto <- knnImputation(auto,k=5,scale = T)
+sum(is.na(auto))
+```
+#Selecting a subset of numeric variables for regression modelling
+```{r}
+auto_numeric <- subset(auto,select=c("hoesepower","city_mpg","peak_rpm","curb_weight","price","engine_size"))
+```
+# We will make a brief visual inspection of vars
+```{r}
+library(psych)
+pairs.panels(auto_numeric,col="green")
+
+library(corrplot)
+corrplot(cor(auto_numeric,method = "kendall"))
+```
+# Data Pre-processing - II
+# splitting the data into train and test sets
+```{r}
+set.seed(786)
+train_rows <- sample(x = 1:nrow(auto_numeric), size = 0.7*nrow(auto_numeric))
+train <- auto_numeric[train_rows,]
+test <- auto_numeric[-train_rows,]
+```
+# Standardizing the Data
+#We will use the Caret pakcage to standardize the data after the split using the __"preProcess()"__ function
+#It saves the metrics such as mean and standard deviation used for calculating the standardized value by creating a model object
+#* We can then use the model object in the __"predict()"__ function to standardize any other unseen dataset with the same distribuiton and variables
+```{r}
+library(caret)
+# The "preProcess()" function creates a model object required for standardizing unseen data
+
+# Do not standardize the target variable
+
+std_model <- preProcess(train[, !names(train) %in% c("price")], method = c("center", "scale"))
+
+# The predict() function is used to standardize any other unseen data
+train[, !names(train) %in% c("price")] <- predict(object = std_model, newdata = train[, !names(train) %in% c("price")])
+test[, !names(train) %in% c("price")] <- predict(object = std_model, newdata = test[, !names(train) %in% c("price")])
+```
+# Modelling the Data
+
+## Basic Model
+
+###Multiple Regression Model
+
+### Stepwise Elimination
+```{r}
+fit1 <- lm(formula = price~hoesepower+city_mpg+peak_rpm+curb_weight+engine_size,data = train)
+summary(fit1)
+
+plot(fit1)
+
+#R^2 = 82.19
+
+```
+# Checking for non-linearity properly 
+# This can be done after the model is created
+```{r}
+library(corrplot)
+library(car)
+crPlots(fit1)
+
+#Component residual plots, an extension of partial residual plots, are a good way to see if the predictors have a linear relationship to the dependent variable. A partial residual plot essentially attempts to model the residuals of one predictor against the dependent variable. A component residual plot adds a line indicating where the line of best fit lies. A significant difference between the residual line and the component line indicates that the predictor does not have a linear relationship with the dependent variable
+```
+#Eliminate Extreme Values / Outliers
+# Cooks D-plot cutoff as 4/(n-k-1)
+```{r}
+cutoff <- 4/((nrow(train)-length(fit1$coefficients)-2))
+plot(fit1,which = 4,cook.levels = cutoff)
+plot(fit1,which = 5,cook.levels = cutoff)
+
+# Now to eliminate the training outlier samples
+train <- train[-which(rownames(train)%in%c("75","50","128")),]
+
+
+```
+# Refit the model 
+```{r}
+fit2<- lm(formula = price~hoesepower+city_mpg+peak_rpm+curb_weight+engine_size,data = train)
+summary(fit2)
+```
+
+```{r}
+cutoff <- 4/((nrow(train)-length(fit2$coefficients)-2))
+plot(fit2,which = 4,cook.levels = cutoff)
+plot(fit2,which = 5,cook.levels = cutoff)
+
+# Now to eliminate the training outlier samples
+train <- train[-which(rownames(train)%in%c("17","127","19")),]
+```
+# Refit Model
+```{r}
+fit3<- lm(formula = price~hoesepower+city_mpg+peak_rpm+curb_weight+engine_size,data = train)
+summary(fit3)
+```
+
+```{r}
+cutoff <- 4/((nrow(train)-length(fit3$coefficients)-2))
+plot(fit3,which = 4,cook.levels = cutoff)
+plot(fit3,which = 5,cook.levels = cutoff)
+
+# Now to eliminate the training outlier samples
+train <- train[-which(rownames(train)%in%c("18","59","31")),]
+
+```
+## Best Choosen Model 
+```{r}
+fit4<- lm(formula = price~hoesepower+city_mpg+peak_rpm+curb_weight+engine_size,data = train)
+summary(fit4)
+par(mfrow=c(2,2))
+plot(fit4)
+
+# R^2 = 81.56
+```
+# Evaluating Final Linear Model
+
+```{r}
+preds_model <- predict(fit4, test[, !(names(test) %in% c("price"))])
+
+regr.eval(preds_model,test$price)
+```
+The final formula for the chosen regression model is:
+
+$$Price = 13079.9 - 723\times (HP)-674.1\times(city_mpg)+857.4\times(peak_rpm)+3208.6\times(curb_weight)+4293.7\times(enginesize)$$
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
